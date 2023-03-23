@@ -46,16 +46,31 @@ public class RestAPIVerticle extends AbstractVerticle {
 		// handling
 		router.route("/api*").handler(BodyHandler.create());
 
+		// Endpoint definition for CRUD ops
 		router.get("/api/sensors/:sensorid").handler(this::getSensorById);
 		router.post("/api/sensors").handler(this::addSensor);
 		router.delete("/api/sensors/:sensorid").handler(this::deleteSensor);
 		router.put("/api/sensors/:sensorid").handler(this::putSensor);
 	}
 
+	/**
+	 * Deserialization of the message sent in the body of a message to the
+	 * DatabaseMessage type. It is useful for managing the exchange of messages
+	 * between the controller and the Rest API.
+	 * 
+	 * @param handler AsyncResult<Message<Object>> returned by controller Verticle
+	 * 
+	 * @return DatabaseMessage deserialized
+	 */
 	private DatabaseMessage deserializeDatabaseMessageFromMessageHandler(AsyncResult<Message<Object>> handler) {
 		return gson.fromJson(handler.result().body().toString(), DatabaseMessage.class);
 	}
 
+	/**
+	 * GET Sensor handler function for /api/sensors/:sensorid endpoint
+	 * 
+	 * @param routingContext
+	 */
 	private void getSensorById(RoutingContext routingContext) {
 		int sensorId = Integer.parseInt(routingContext.request().getParam("sensorid"));
 
@@ -73,8 +88,17 @@ public class RestAPIVerticle extends AbstractVerticle {
 		});
 	}
 
+	/**
+	 * POST Sensor handler function for /api/sensors endpoint
+	 * 
+	 * @param routingContext
+	 */
 	private void addSensor(RoutingContext routingContext) {
 		final Sensor sensor = gson.fromJson(routingContext.getBodyAsString(), Sensor.class);
+		if (sensor == null || sensor.getIdDevice() == null || sensor.getSensorType() == null) {
+			routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			return;
+		}
 		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.INSERT, DatabaseEntity.Sensor,
 				DatabaseMethod.CreateSensor, gson.toJson(sensor));
 
@@ -89,6 +113,11 @@ public class RestAPIVerticle extends AbstractVerticle {
 		});
 	}
 
+	/**
+	 * DELETE Sensor handler function for /api/sensors/:sensorid endpoint
+	 * 
+	 * @param routingContext
+	 */
 	private void deleteSensor(RoutingContext routingContext) {
 		int sensorId = Integer.parseInt(routingContext.request().getParam("sensorid"));
 
@@ -106,9 +135,20 @@ public class RestAPIVerticle extends AbstractVerticle {
 		});
 	}
 
+	/**
+	 * PUT Sensor handler function for /api/sensors/:sensorid endpoint
+	 * 
+	 * @param routingContext
+	 */
 	private void putSensor(RoutingContext routingContext) {
 		final Sensor sensor = gson.fromJson(routingContext.getBodyAsString(), Sensor.class);
 		int sensorId = Integer.parseInt(routingContext.request().getParam("sensorid"));
+
+		if (sensor == null) {
+			routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			return;
+		}
+
 		sensor.setIdSensor(sensorId);
 		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.UPDATE, DatabaseEntity.Sensor,
 				DatabaseMethod.EditSensor, gson.toJson(sensor));
