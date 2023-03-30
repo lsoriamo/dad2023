@@ -7,12 +7,16 @@ import com.google.gson.GsonBuilder;
 
 import es.us.dad.mysql.entities.Actuator;
 import es.us.dad.mysql.entities.ActuatorStatus;
+import es.us.dad.mysql.entities.ActuatorType;
 import es.us.dad.mysql.entities.Device;
 import es.us.dad.mysql.entities.Group;
 import es.us.dad.mysql.entities.Sensor;
+import es.us.dad.mysql.entities.SensorType;
 import es.us.dad.mysql.entities.SensorValue;
 import es.us.dad.mysql.messages.DatabaseEntity;
 import es.us.dad.mysql.messages.DatabaseMessage;
+import es.us.dad.mysql.messages.DatabaseMessageIdAndActuatorType;
+import es.us.dad.mysql.messages.DatabaseMessageIdAndSensorType;
 import es.us.dad.mysql.messages.DatabaseMessageLatestValues;
 import es.us.dad.mysql.messages.DatabaseMessageType;
 import es.us.dad.mysql.messages.DatabaseMethod;
@@ -61,7 +65,16 @@ public class RestAPIVerticle extends AbstractVerticle {
 		router.put("/api/groups/:groupid").handler(this::putGroup);
 		router.get("/api/groups/:groupid/devices").handler(this::getDevicesFromGroup);
 		router.put("/api/groups/:groupid/devices/:deviceid").handler(this::addDeviceToGroup);
-		
+
+		router.get("/api/devices/:device").handler(this::getDeviceById);
+		router.post("/api/devices").handler(this::addDevice);
+		router.delete("/api/devices/:deviceid").handler(this::deleteDevice);
+		router.put("/api/devices/:deviceid").handler(this::putDevice);
+		router.get("/api/devices/:deviceid/sensors").handler(this::getSensorsFromDevice);
+		router.get("/api/devices/:deviceid/actuators").handler(this::getActuatorsFromDevice);
+		router.get("/api/devices/:deviceid/sensors/:type").handler(this::getSensorsFromDeviceAndType);
+		router.get("/api/devices/:deviceid/actuators/:type").handler(this::getActuatorsFromDeviceAndType);
+
 		router.get("/api/sensors/:sensor").handler(this::getSensorById);
 		router.post("/api/sensors").handler(this::addSensor);
 		router.delete("/api/sensors/:sensorid").handler(this::deleteSensor);
@@ -95,24 +108,14 @@ public class RestAPIVerticle extends AbstractVerticle {
 	private DatabaseMessage deserializeDatabaseMessageFromMessageHandler(AsyncResult<Message<Object>> handler) {
 		return gson.fromJson(handler.result().body().toString(), DatabaseMessage.class);
 	}
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+
 	/**
 	 * GET Group handler function for /api/groups/:groupid endpoint
 	 * 
 	 * @param routingContext
 	 */
 	private void getGroupById(RoutingContext routingContext) {
-		int groupId = Integer.parseInt(routingContext.request().getParam("sensor"));
+		int groupId = Integer.parseInt(routingContext.request().getParam("groupid"));
 
 		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.SELECT, DatabaseEntity.Group,
 				DatabaseMethod.GetGroup, groupId);
@@ -203,8 +206,7 @@ public class RestAPIVerticle extends AbstractVerticle {
 			}
 		});
 	}
-	
-	
+
 	/**
 	 * GET Group handler function for /api/groups/:groupid/devices endpoint
 	 * 
@@ -226,10 +228,10 @@ public class RestAPIVerticle extends AbstractVerticle {
 			}
 		});
 	}
-	
-	
+
 	/**
-	 * PUT Group handler function for /api/groups/:groupid/devices/:deviceid endpoint
+	 * PUT Group handler function for /api/groups/:groupid/devices/:deviceid
+	 * endpoint
 	 * 
 	 * @param routingContext
 	 */
@@ -253,15 +255,199 @@ public class RestAPIVerticle extends AbstractVerticle {
 			}
 		});
 	}
-	
-	
-	
-	
-	
-	
-	
-	
-	
+
+	/**
+	 * GET Device handler function for /api/devices/:device endpoint
+	 * 
+	 * @param routingContext
+	 */
+	private void getDeviceById(RoutingContext routingContext) {
+		int deviceId = Integer.parseInt(routingContext.request().getParam("device"));
+
+		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.SELECT, DatabaseEntity.Device,
+				DatabaseMethod.GetDevice, deviceId);
+
+		vertx.eventBus().request(RestEntityMessage.Device.getAddress(), gson.toJson(databaseMessage), handler -> {
+			if (handler.succeeded()) {
+				DatabaseMessage responseMessage = deserializeDatabaseMessageFromMessageHandler(handler);
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(200)
+						.end(gson.toJson(responseMessage.getResponseBodyAs(Device.class)));
+			} else {
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			}
+		});
+	}
+
+	/**
+	 * POST Device handler function for /api/devices endpoint
+	 * 
+	 * @param routingContext
+	 */
+	private void addDevice(RoutingContext routingContext) {
+		final Device device = gson.fromJson(routingContext.getBodyAsString(), Device.class);
+		if (device == null || device.getMqttChannel() == null) {
+			routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			return;
+		}
+		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.INSERT, DatabaseEntity.Device,
+				DatabaseMethod.CreateDevice, gson.toJson(device));
+
+		vertx.eventBus().request(RestEntityMessage.Device.getAddress(), gson.toJson(databaseMessage), handler -> {
+			if (handler.succeeded()) {
+				DatabaseMessage responseMessage = deserializeDatabaseMessageFromMessageHandler(handler);
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(201)
+						.end(gson.toJson(responseMessage.getResponseBodyAs(Device.class)));
+			} else {
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			}
+		});
+	}
+
+	/**
+	 * DELETE Device handler function for /api/devices/:deviceid endpoint
+	 * 
+	 * @param routingContext
+	 */
+	private void deleteDevice(RoutingContext routingContext) {
+		int deviceId = Integer.parseInt(routingContext.request().getParam("deviceid"));
+
+		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.DELETE, DatabaseEntity.Device,
+				DatabaseMethod.DeleteDevice, deviceId);
+
+		vertx.eventBus().request(RestEntityMessage.Device.getAddress(), gson.toJson(databaseMessage), handler -> {
+			if (handler.succeeded()) {
+				DatabaseMessage responseMessage = deserializeDatabaseMessageFromMessageHandler(handler);
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(200)
+						.end(responseMessage.getResponseBody());
+			} else {
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			}
+		});
+	}
+
+	/**
+	 * PUT Device handler function for /api/devices/:deviceid endpoint
+	 * 
+	 * @param routingContext
+	 */
+	private void putDevice(RoutingContext routingContext) {
+		final Device device = gson.fromJson(routingContext.getBodyAsString(), Device.class);
+		int deviceId = Integer.parseInt(routingContext.request().getParam("deviceid"));
+
+		if (device == null) {
+			routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			return;
+		}
+
+		device.setIdGroup(deviceId);
+		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.UPDATE, DatabaseEntity.Device,
+				DatabaseMethod.EditDevice, gson.toJson(device));
+
+		vertx.eventBus().request(RestEntityMessage.Device.getAddress(), gson.toJson(databaseMessage), handler -> {
+			if (handler.succeeded()) {
+				DatabaseMessage responseMessage = deserializeDatabaseMessageFromMessageHandler(handler);
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(201)
+						.end(gson.toJson(responseMessage.getResponseBodyAs(Device.class)));
+			} else {
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			}
+		});
+	}
+
+	/**
+	 * GET Device handler function for /api/devices/:deviceid/sensors endpoint
+	 * 
+	 * @param routingContext
+	 */
+	private void getSensorsFromDevice(RoutingContext routingContext) {
+		int deviceId = Integer.parseInt(routingContext.request().getParam("deviceid"));
+
+		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.SELECT, DatabaseEntity.Device,
+				DatabaseMethod.GetSensorsFromDeviceId, deviceId);
+
+		vertx.eventBus().request(RestEntityMessage.Device.getAddress(), gson.toJson(databaseMessage), handler -> {
+			if (handler.succeeded()) {
+				DatabaseMessage responseMessage = deserializeDatabaseMessageFromMessageHandler(handler);
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(200)
+						.end(gson.toJson(responseMessage.getResponseBodyAs(Sensor[].class)));
+			} else {
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			}
+		});
+	}
+
+	/**
+	 * GET Device handler function for /api/devices/:deviceid/actuators endpoint
+	 * 
+	 * @param routingContext
+	 */
+	private void getActuatorsFromDevice(RoutingContext routingContext) {
+		int deviceId = Integer.parseInt(routingContext.request().getParam("deviceid"));
+
+		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.SELECT, DatabaseEntity.Device,
+				DatabaseMethod.GetActuatorsFromDeviceId, deviceId);
+
+		vertx.eventBus().request(RestEntityMessage.Device.getAddress(), gson.toJson(databaseMessage), handler -> {
+			if (handler.succeeded()) {
+				DatabaseMessage responseMessage = deserializeDatabaseMessageFromMessageHandler(handler);
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(200)
+						.end(gson.toJson(responseMessage.getResponseBodyAs(Actuator[].class)));
+			} else {
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			}
+		});
+	}
+
+	/**
+	 * GET Device handler function for /api/devices/:deviceid/sensors/:type endpoint
+	 * 
+	 * @param routingContext
+	 */
+	private void getSensorsFromDeviceAndType(RoutingContext routingContext) {
+		int deviceId = Integer.parseInt(routingContext.request().getParam("deviceid"));
+		SensorType type = SensorType.valueOf(routingContext.request().getParam("type"));
+		DatabaseMessageIdAndSensorType databaseMessageIdAndSensorType = new DatabaseMessageIdAndSensorType(deviceId,
+				type);
+
+		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.SELECT, DatabaseEntity.Device,
+				DatabaseMethod.GetSensorsFromDeviceIdAndSensorType, databaseMessageIdAndSensorType);
+
+		vertx.eventBus().request(RestEntityMessage.Device.getAddress(), gson.toJson(databaseMessage), handler -> {
+			if (handler.succeeded()) {
+				DatabaseMessage responseMessage = deserializeDatabaseMessageFromMessageHandler(handler);
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(200)
+						.end(gson.toJson(responseMessage.getResponseBodyAs(Sensor[].class)));
+			} else {
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			}
+		});
+	}
+
+	/**
+	 * GET Device handler function for /api/devices/:deviceid/actuators/:type
+	 * endpoint
+	 * 
+	 * @param routingContext
+	 */
+	private void getActuatorsFromDeviceAndType(RoutingContext routingContext) {
+		int deviceId = Integer.parseInt(routingContext.request().getParam("deviceid"));
+		ActuatorType type = ActuatorType.valueOf(routingContext.request().getParam("type"));
+		DatabaseMessageIdAndActuatorType databaseMessageIdAndActuatorType = new DatabaseMessageIdAndActuatorType(
+				deviceId, type);
+
+		DatabaseMessage databaseMessage = new DatabaseMessage(DatabaseMessageType.SELECT, DatabaseEntity.Device,
+				DatabaseMethod.GetActuatorsFromDeviceIdAndActuatorType, databaseMessageIdAndActuatorType);
+
+		vertx.eventBus().request(RestEntityMessage.Device.getAddress(), gson.toJson(databaseMessage), handler -> {
+			if (handler.succeeded()) {
+				DatabaseMessage responseMessage = deserializeDatabaseMessageFromMessageHandler(handler);
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(200)
+						.end(gson.toJson(responseMessage.getResponseBodyAs(Actuator[].class)));
+			} else {
+				routingContext.response().putHeader("content-type", "application/json").setStatusCode(500).end();
+			}
+		});
+	}
 
 	/**
 	 * GET Sensor handler function for /api/sensors/:sensorid endpoint
