@@ -47,7 +47,6 @@ public class ActuatorsController extends AbstractController {
 	 * layer.
 	 */
 	public void start(Promise<Void> startFuture) {
-
 		getVertx().eventBus().consumer(RestEntityMessage.Actuator.getAddress(), message -> {
 			DatabaseMessage databaseMessage = gson.fromJson((String) message.body(), DatabaseMessage.class);
 			/*
