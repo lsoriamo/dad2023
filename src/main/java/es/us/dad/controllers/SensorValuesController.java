@@ -4,6 +4,7 @@ import java.util.Calendar;
 
 import es.us.dad.mqtt.MqttClientUtil;
 import es.us.dad.mysql.entities.Device;
+import es.us.dad.mysql.entities.Group;
 import es.us.dad.mysql.entities.Sensor;
 import es.us.dad.mysql.entities.SensorValue;
 import es.us.dad.mysql.messages.DatabaseEntity;
@@ -68,38 +69,57 @@ public class SensorValuesController extends AbstractController {
 				// Getting sensor entity from idSensor property present in SensorValue
 				launchDatabaseOperation(DatabaseEntity.Sensor, new DatabaseMessage(DatabaseMessageType.SELECT,
 						DatabaseEntity.Sensor, DatabaseMethod.GetSensor, sensorValue.getIdSensor())).future()
-								.onComplete(res -> {
-									if (res.succeeded()) {
-										Sensor sensor = res.result().getResponseBodyAs(Sensor.class);
-										if (sensor != null) {
+						.onComplete(res -> {
+							if (res.succeeded()) {
+								Sensor sensor = res.result().getResponseBodyAs(Sensor.class);
+								if (sensor != null) {
 
-											// Getting device entity from idDevice property present in Sensor
-											launchDatabaseOperation(DatabaseEntity.Device,
-													new DatabaseMessage(DatabaseMessageType.SELECT,
-															DatabaseEntity.Device, DatabaseMethod.GetDevice,
-															sensor.getIdDevice())).future().onComplete(resDevice -> {
-																Device device = resDevice.result()
-																		.getResponseBodyAs(Device.class);
-																if (resDevice.succeeded()) {
-																	// Publish MQTT Message int device mqtt topic
+									// Getting device entity from idDevice property present in Sensor
+									launchDatabaseOperation(DatabaseEntity.Device,
+											new DatabaseMessage(DatabaseMessageType.SELECT, DatabaseEntity.Device,
+													DatabaseMethod.GetDevice, sensor.getIdDevice()))
+											.future().onComplete(resDevice -> {
+												Device device = resDevice.result().getResponseBodyAs(Device.class);
+												if (resDevice.succeeded()) {
+													// Publish MQTT Message in device MQTT topic
+													mqttClientUtil.publishMqttMessage(device.getMqttChannel(),
+															gson.toJson(sensorValue), handler -> {
+																System.out.println(handler.result());
+															});
+
+													// Getting group entity from idGroup property present in Device
+													launchDatabaseOperation(DatabaseEntity.Group,
+															new DatabaseMessage(DatabaseMessageType.SELECT,
+																	DatabaseEntity.Group, DatabaseMethod.GetGroup,
+																	device.getIdGroup()))
+															.future().onComplete(resGroup -> {
+																Group group = resGroup.result()
+																		.getResponseBodyAs(Group.class);
+																if (resGroup.succeeded()) {
+																	// Publish MQTT Message in group' MQTT topic
+																	// TODO: implements business logic here (publish
+																	// some readable message for devices in group)
 																	mqttClientUtil.publishMqttMessage(
-																			device.getMqttChannel(),
+																			group.getMqttChannel(),
 																			gson.toJson(sensorValue), handler -> {
 																				System.out.println(handler.result());
 																			});
 																}
 															});
 
-											// Updates device entity with the current timestamp where last sensor has
-											// been modified
-											launchDatabaseOperation(DatabaseEntity.Device,
-													new DatabaseMessage(DatabaseMessageType.UPDATE,
-															DatabaseEntity.Device, DatabaseMethod.EditDevice,
-															new Device(sensor.getIdDevice(), null, null, null, null,
-																	null, Calendar.getInstance().getTimeInMillis())));
-										}
-									}
-								});
+												}
+											});
+
+									// Updates device entity with the current timestamp where last sensor has
+									// been modified
+									launchDatabaseOperation(DatabaseEntity.Device,
+											new DatabaseMessage(DatabaseMessageType.UPDATE, DatabaseEntity.Device,
+													DatabaseMethod.EditDevice,
+													new Device(sensor.getIdDevice(), null, null, null, null, null,
+															Calendar.getInstance().getTimeInMillis())));
+								}
+							}
+						});
 				break;
 			case DeleteSensorValue:
 				launchDatabaseOperation(message);
