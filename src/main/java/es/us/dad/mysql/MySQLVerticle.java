@@ -753,7 +753,7 @@ public class MySQLVerticle extends AbstractVerticle {
 
 	protected void deleteActuatorStatus(int idActuatorStatus, DatabaseMessage databaseMessage,
 			Message<Object> message) {
-		mySqlClient.preparedQuery("DELETE FROM dad_database.idActuatorState WHERE idSensorValue = ?;",
+		mySqlClient.preparedQuery("DELETE FROM dad_database.actuatorState WHERE idActuatorState = ?;",
 				Tuple.of(idActuatorStatus), res -> {
 					if (res.succeeded()) {
 						databaseMessage.setResponseBody(idActuatorStatus);
