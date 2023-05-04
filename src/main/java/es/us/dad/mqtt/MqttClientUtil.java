@@ -16,7 +16,8 @@ import io.vertx.mqtt.MqttClientOptions;
  * be modified to (MacOS: nano /usr/local/etc/mosquitto/mosquitto.conf, Linux:
  * nano /etc/mosquitto/mosquitto.conf, Windows: edit file located in Mosquitto
  * installation folder). For this purpose, uncomment line where "allow_anonymous
- * true" is defined. You should restart mosquitto service once this change is
+ * true" is defined. If you need connect to this broker from non-localhost device,
+ * uncomment this line: "listener 1883 0.0.0.0". You should restart mosquitto service once this change is
  * made (MacOS: brew services restart mosquitto, Windows: net stop mosquitto and
  * net start mosquitto [powershell with admin rights], Linux: sudo systemctl
  * restart mosquitto)
